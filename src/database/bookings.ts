@@ -42,7 +42,6 @@ export async function createBooking(
   sb: BasicSupabaseClient,
   bookingBody: NewBooking,
 ): Promise<Booking> {
-  console.log(bookingBody)
   const { error, data }: PostgrestSingleResponse<Booking> = await sb
     .from(TABLE_NAME)
     .insert(bookingBody)

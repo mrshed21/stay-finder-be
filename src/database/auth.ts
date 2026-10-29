@@ -38,3 +38,8 @@ export async function getUser(sb: BasicSupabaseClient): Promise<AuthUser> {
   }
   throw error;
 }
+
+export async function logout(sb: BasicSupabaseClient): Promise<void> {
+  const { error } = await sb.auth.signOut({ scope: "local" });
+  if (error) throw error;
+}
