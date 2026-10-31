@@ -25,6 +25,7 @@ export type Database = {
           guests: number
           property_id: string
           status: string
+          total_price: number | null
           user_id: string
         }
         Insert: {
@@ -37,6 +38,7 @@ export type Database = {
           guests: number
           property_id: string
           status?: string
+          total_price?: number | null
           user_id: string
         }
         Update: {
@@ -49,6 +51,7 @@ export type Database = {
           guests?: number
           property_id?: string
           status?: string
+          total_price?: number | null
           user_id?: string
         }
         Relationships: [

@@ -4,13 +4,15 @@ import { getValidatorError } from "../utils/validation.js";
 import type { PropertyKind } from "../types/property.js";
 
 const propertySchema = z.object({
-  title: z.string().min(2, "Title is nececary"),
-  description: z.string().min(3, "Description is nececary"),
-  max_guests: z.number().min(1, "Max guests needs to be min 1"),
+  title: z.string().trim().min(2, "Title must be at least 2 characters"),
+  description: z.string().trim().min(3, "Description must be at least 3 characters"),
+  max_guests: z.number().int().min(1, "Max guests must be at least 1").max(2147483647),
   price_per_night: z
     .number()
-    .min(100, "Price per night needs to be a minimum of 100"),
-  location: z.string().min(2, "Location is nececary"),
+    .finite()
+    .min(100, "Price per night must be at least 100")
+    .max(99999999.99, "Price per night is too high"),
+  location: z.string().trim().min(2, "Location must be at least 2 characters"),
   kind: z.enum<PropertyKind[]>(
     ["apartment", "villa"],
     `Must be one of "apartment", "villa"`,

@@ -1,23 +1,12 @@
 import type { PostgrestSingleResponse } from "@supabase/supabase-js";
 
 import type { BasicSupabaseClient } from "../types/supabase.js";
-import type { NewProperty, Property, PropertyKind, PropertyValidKey } from "../types/property.js";
+import type { NewProperty, Property, PropertyKind } from "../types/property.js";
 
 const TABLE_NAME = "properties";
 
-const SELECT_QUERY_LIST: PropertyValidKey[] = [
-  "property_id",
-  "title",
-  "description",
-  "location",
-  "price_per_night",
-  "max_guests",
-  "kind",
-  "created_at",
-  "user_id"
-];
-
-const SELECT_QUERY = SELECT_QUERY_LIST.join(", ");
+const SELECT_QUERY =
+  "property_id, title, description, location, price_per_night, max_guests, kind, created_at, user_id";
 const QUERY_ID = "property_id";
 const QUERY_KIND = "kind";
 
@@ -68,7 +57,7 @@ export async function getProperties(
   const { error, data } = await query;
 
   if (!error) {
-    return data as any as Property[];
+    return data;
   }
   throw error;
 }
@@ -86,7 +75,7 @@ export async function getPropertiesByKind(
   const { error, data } = await query;
 
   if (!error) {
-    return data as any as Property[];
+    return data;
   }
   throw error;
 }

@@ -5,13 +5,13 @@ export async function register(sb: BasicSupabaseClient, email: string, password:
     email,
     password,
   });
-  if (!error && data.user) {
+  if (!error && data.user?.email) {
     return {
         id: data.user.id,
-        email: data.user.email as string,
+        email: data.user.email,
     };
   }
-  throw error;
+  throw error ?? new Error("Could not create account");
 }
 
 export async function login(sb: BasicSupabaseClient, email: string, password: string): Promise<AuthUser> {
@@ -19,24 +19,24 @@ export async function login(sb: BasicSupabaseClient, email: string, password: st
     email,
     password,
   });
-  if (!error) {
+  if (!error && data.user?.email) {
     return {
         id: data.user.id,
-        email: data.user.email as string,
+        email: data.user.email,
     };
   }
-  throw error;
+  throw error ?? new Error("Could not log in");
 }
 
 export async function getUser(sb: BasicSupabaseClient): Promise<AuthUser> {
   const { data, error } = await sb.auth.getUser();
-  if (!error && data.user) {
+  if (!error && data.user?.email) {
     return {
         id: data.user.id,
-        email: data.user.email as string,
+        email: data.user.email,
     };
   }
-  throw error;
+  throw error ?? new Error("Could not get user");
 }
 
 export async function logout(sb: BasicSupabaseClient): Promise<void> {
