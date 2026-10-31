@@ -7,6 +7,20 @@ const auth = new Hono({
   strict: false,
 });
 
+function authErrorStatus(error: unknown): 400 | 401 | 403 | 404 | 409 | 422 | 429 | 500 | 502 | 503 {
+  if (typeof error === "object" && error !== null && "status" in error) {
+    const status = error.status;
+    if (
+      status === 400 || status === 401 || status === 403 || status === 404 ||
+      status === 409 || status === 422 || status === 429 || status === 500 ||
+      status === 502 || status === 503
+    ) {
+      return status;
+    }
+  }
+  return 500;
+}
+
 auth.post("/register", authValidator, async (c) => {
   const { email, password } = c.req.valid("json");
 
@@ -14,13 +28,9 @@ auth.post("/register", authValidator, async (c) => {
     const sb = c.get("supabase");
     const user = await register(sb, email, password);
     return c.json({ user }, 201);
-  } catch (e: any) {
-    return c.json(
-      {
-        message: e?.message,
-      },
-      400,
-    );
+  } catch (error) {
+    const status = authErrorStatus(error);
+    return c.json({ message: status < 500 ? "Could not create account" : "Could not register" }, status);
   }
 });
 
@@ -31,12 +41,12 @@ auth.post("/login", authValidator, async (c) => {
     const sb = c.get("supabase");
     const user = await login(sb, email, password);
     return c.json({ user }, 200);
-  } catch {
+  } catch (error) {
+    const status = authErrorStatus(error);
+    const responseStatus = status === 400 ? 401 : status;
     return c.json(
-      {
-        message: "Invalid credentials",
-      },
-      400,
+      { message: responseStatus === 401 ? "Invalid credentials" : "Could not log in" },
+      responseStatus,
     );
   }
 });

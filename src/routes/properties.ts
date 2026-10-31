@@ -17,7 +17,6 @@ import {
 } from "../database/properties.js";
 import { requireAuth } from "../middleware/auth.js";
 
-import type { User } from "@supabase/supabase-js";
 import type { Property } from "../types/property.js";
 
 const properties = new Hono({ strict: false });
@@ -81,11 +80,11 @@ properties.get("/:id", propertyIdParamValidator, async (c) => {
 properties.post("/", requireAuth, propertyValidator, async (c) => {
   const propertyBody = c.req.valid("json");
   const sb = c.get("supabase");
-  const user = c.get("user") as User;
+  const user = c.get("user");
   try {
     const property = await createProperty(sb, {
       ...propertyBody,
-      user_id: user.id,
+      user_id: user!.id,
     });
     return c.json(property, 201);
   } catch (e) {
