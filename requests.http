@@ -1,0 +1,199 @@
+### StayFinder API examples
+### Replace the example email/password and IDs with your own test account and disposable test records.
+### Do not put real passwords, tokens, cookies, or service-role keys in this file.
+### REST Client should retain the session cookie received at login. Otherwise use the browser.
+
+@baseUrl = http://localhost:3000
+@email = test-account@example.test
+@password = replace-with-test-password
+@propertyId = replace-with-disposable-property-uuid
+@bookingId = replace-with-disposable-booking-uuid
+
+### Register test account — expected 201 (if confirmation is required, confirm before login)
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+### Login — expected 200 and session cookie
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+### Invalid login — expected 401
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "incorrect-test-password"
+}
+
+### Current user — expected 200 when signed in, 401 after clearing the cookie
+GET {{baseUrl}}/auth/me
+
+### Logout — expected 200; /auth/me should then return 401
+POST {{baseUrl}}/auth/logout
+
+### Public list — expected 200
+GET {{baseUrl}}/properties/
+
+### Filters and ascending price sort — expected 200
+GET {{baseUrl}}/properties/?location=Oslo&maxprice=250&maxguests=2&sort=asc
+
+### Descending price sort — expected 200
+GET {{baseUrl}}/properties/?sort=desc
+
+### Missing property — expected 404
+GET {{baseUrl}}/properties/00000000-0000-0000-0000-000000000000
+
+### Create a disposable property while signed in — expected 201; copy its returned UUID into @propertyId
+POST {{baseUrl}}/properties/
+Content-Type: application/json
+
+{
+  "title": "Disposable test stay",
+  "description": "Temporary API test property",
+  "location": "Oslo",
+  "kind": "apartment",
+  "max_guests": 2,
+  "price_per_night": 200
+}
+
+### Invalid property — expected 400
+POST {{baseUrl}}/properties/
+Content-Type: application/json
+
+{
+  "title": "x",
+  "description": "x",
+  "location": "Oslo",
+  "kind": "apartment",
+  "max_guests": 0,
+  "price_per_night": 50
+}
+
+### Property details — expected 200
+GET {{baseUrl}}/properties/{{propertyId}}
+
+### Update your disposable property — expected 200
+PATCH {{baseUrl}}/properties/{{propertyId}}
+Content-Type: application/json
+
+{
+  "title": "Disposable test stay updated"
+}
+
+### Sign in as another account; updating someone else's disposable property is expected 403.
+PATCH {{baseUrl}}/properties/{{propertyId}}
+Content-Type: application/json
+
+{
+  "title": "Should not update"
+}
+
+### Create a future booking for the disposable property — expected 201; copy its UUID into @bookingId
+POST {{baseUrl}}/bookings/properties/{{propertyId}}
+Content-Type: application/json
+
+{
+  "guest_name": "Test Guest",
+  "guest_email": "test-guest@example.test",
+  "check_in": "2099-01-10",
+  "check_out": "2099-01-12",
+  "guests": 2
+}
+
+### Invalid email/guest count — expected 400 and no booking created
+POST {{baseUrl}}/bookings/properties/{{propertyId}}
+Content-Type: application/json
+
+{
+  "guest_name": "Test Guest",
+  "guest_email": "not-an-email",
+  "check_in": "2099-01-10",
+  "check_out": "2099-01-12",
+  "guests": 0
+}
+
+### Past check-in — expected 400 and no booking created
+POST {{baseUrl}}/bookings/properties/{{propertyId}}
+Content-Type: application/json
+
+{
+  "guest_name": "Test Guest",
+  "guest_email": "test-guest@example.test",
+  "check_in": "2000-01-10",
+  "check_out": "2000-01-12",
+  "guests": 1
+}
+
+### Visible bookings — expected 200 for the guest or property owner, 401 signed out
+GET {{baseUrl}}/bookings/properties/{{propertyId}}
+
+### Update your own future booking — expected 200
+PATCH {{baseUrl}}/bookings/properties/{{propertyId}}/{{bookingId}}
+Content-Type: application/json
+
+{
+  "guest_name": "Test Guest Updated"
+}
+
+### Invalid booking dates — expected 400 and unchanged booking
+PATCH {{baseUrl}}/bookings/properties/{{propertyId}}/{{bookingId}}
+Content-Type: application/json
+
+{
+  "check_in": "2099-01-12",
+  "check_out": "2099-01-12"
+}
+
+### Attempt to set booking status through API — expected 400 and unchanged booking
+PATCH {{baseUrl}}/bookings/properties/{{propertyId}}/{{bookingId}}
+Content-Type: application/json
+
+{
+  "status": "confirmed"
+}
+
+### Non-owner checks: sign in as another test account; PATCH is expected 403 and the booking stays unchanged.
+### DELETE is also expected 403; only run this against the disposable booking above.
+PATCH {{baseUrl}}/bookings/properties/{{propertyId}}/{{bookingId}}
+Content-Type: application/json
+
+{
+  "guest_name": "Should not update"
+}
+
+DELETE {{baseUrl}}/bookings/properties/{{propertyId}}/{{bookingId}}
+
+### Sign back in as the booking guest, then delete the disposable future booking — expected 204.
+DELETE {{baseUrl}}/bookings/properties/{{propertyId}}/{{bookingId}}
+
+### Past booking edit/delete return 400. Use an existing disposable past booking only; do not change real records.
+
+### Delete the disposable property only after the test — expected 204; cascades its disposable bookings.
+### Do not run against an existing property.
+DELETE {{baseUrl}}/properties/{{propertyId}}
+
+### Unauthenticated property/booking creation returns 401. Clear the REST Client cookie jar before testing.
+POST {{baseUrl}}/properties/
+Content-Type: application/json
+
+{
+  "title": "Disposable test stay",
+  "description": "Temporary API test property",
+  "location": "Oslo",
+  "kind": "apartment",
+  "max_guests": 2,
+  "price_per_night": 200
+}
+
+### Supabase direct RLS/trigger checks require authenticated user tokens and are not performed by this file.
