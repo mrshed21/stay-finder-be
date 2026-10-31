@@ -10,6 +10,7 @@ const TABLE_NAME = "bookings";
 const SELECT_QUERY_LIST: BookingValidKey[] = [
   "booking_id",
   "property_id",
+  "user_id",
   "guest_name",
   "guest_email",
   "check_in",
@@ -24,6 +25,7 @@ const QUERY_ID = "booking_id";
 const QUERY_PROPERTY_ID = "property_id";
 
 export async function getBookingsByPropertyId(
+  sb: BasicSupabaseClient,
   propertyId: string,
 ): Promise<Booking[]> {
   const { error, data } = await sb
@@ -55,9 +57,10 @@ export async function createBooking(
 }
 
 export async function updateBooking(
+  sb: BasicSupabaseClient,
   propertyId: string,
   bookingId: string,
-  booking: Partial<Booking>,
+  booking: Partial<Pick<Booking, "guest_name" | "guest_email" | "check_in" | "check_out" | "guests">>,
 ): Promise<Booking> {
   const { error, data }: PostgrestSingleResponse<Booking> = await sb
     .from(TABLE_NAME)
@@ -73,7 +76,29 @@ export async function updateBooking(
   throw error;
 }
 
-export async function deleteBooking(propertyId: string, bookingId: string) {
+export async function getBookingOwner(
+  sb: BasicSupabaseClient,
+  propertyId: string,
+  bookingId: string,
+): Promise<Pick<Booking, "booking_id" | "property_id" | "user_id" | "check_in" | "check_out"> | null> {
+  const { error, data } = await sb
+    .from(TABLE_NAME)
+    .select("booking_id, property_id, user_id, check_in, check_out")
+    .eq(QUERY_ID, bookingId)
+    .eq(QUERY_PROPERTY_ID, propertyId)
+    .maybeSingle();
+
+  if (!error) {
+    return data;
+  }
+  throw error;
+}
+
+export async function deleteBooking(
+  sb: BasicSupabaseClient,
+  propertyId: string,
+  bookingId: string,
+) {
   const { error }: PostgrestSingleResponse<Booking> = await sb
     .from(TABLE_NAME)
     .delete()
