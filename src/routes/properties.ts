@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { PostgrestError } from "@supabase/supabase-js";
 
 import {
   propertyOptionalValidator,
@@ -112,6 +113,13 @@ properties.patch("/:id", requireAuth, propertyIdParamValidator, propertyOptional
     const property = await updatePropertyById(sb, propertyId, propertyBody);
     return c.json(property);
   } catch (e) {
+    const error = e as PostgrestError;
+    if (
+      error.code === "23514" &&
+      error.message === "Property capacity is below an active booking's guest count"
+    ) {
+      return c.json({ error: "Cannot lower capacity below the guest count of an active booking" }, 400);
+    }
     console.error("Error updating property in database", e);
     return c.json({ error: "Could not update property" }, 500);
   }

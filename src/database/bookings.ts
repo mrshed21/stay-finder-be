@@ -46,7 +46,7 @@ export async function updateBooking(
   sb: BasicSupabaseClient,
   propertyId: string,
   bookingId: string,
-  booking: Partial<Pick<Booking, "guest_name" | "guest_email" | "check_in" | "check_out" | "guests">>,
+  booking: Partial<Pick<Booking, "guest_name" | "guest_email" | "check_in" | "check_out" | "guests" | "total_price">>,
 ): Promise<Booking> {
   const { error, data }: PostgrestSingleResponse<Booking> = await sb
     .from(TABLE_NAME)
@@ -66,10 +66,10 @@ export async function getBookingOwner(
   sb: BasicSupabaseClient,
   propertyId: string,
   bookingId: string,
-): Promise<Pick<Booking, "booking_id" | "property_id" | "user_id" | "check_in" | "check_out"> | null> {
+): Promise<Pick<Booking, "booking_id" | "property_id" | "user_id" | "check_in" | "check_out" | "guests"> | null> {
   const { error, data } = await sb
     .from(TABLE_NAME)
-    .select("booking_id, property_id, user_id, check_in, check_out")
+    .select("booking_id, property_id, user_id, check_in, check_out, guests")
     .eq(QUERY_ID, bookingId)
     .eq(QUERY_PROPERTY_ID, propertyId)
     .maybeSingle();
