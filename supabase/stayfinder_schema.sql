@@ -1,5 +1,5 @@
--- StayFinder schema for a fresh Supabase project.
--- Review before running. This file has not been applied to any database.
+-- StayFinder schema reference for a fresh, empty Supabase project.
+-- Review before running. Do not apply it to a project that already has these tables.
 
 create table public.properties (
   property_id uuid primary key default gen_random_uuid(),
