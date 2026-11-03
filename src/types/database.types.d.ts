@@ -179,7 +179,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      booked_property_ids: {
+        Args: { p_check_in: string; p_check_out: string }
+        Returns: string[]
+      }
     }
     Enums: {
       [_ in never]: never

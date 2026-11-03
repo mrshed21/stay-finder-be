@@ -209,6 +209,45 @@
           ]
         },
         {
+          "name": "Properties free on these dates (VG7)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/properties/?checkin=2099-01-10&checkout=2099-01-12"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Returns a list\", function () { pm.expect(pm.response.json()).to.be.an(\"array\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Invalid availability dates (VG7)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/properties/?checkin=2099-01-12&checkout=2099-01-10"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Property details",
           "request": {
             "method": "GET",

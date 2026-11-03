@@ -26,6 +26,7 @@ For an **existing** project, apply only the migrations it does not have yet, in 
 
 - `20261103000000_vg2_booking_overlap.sql` (VG2). It stops without changing anything if existing bookings already overlap.
 - `20261103120000_vg4_booking_status.sql` (VG4). It replaces the booking trigger function and adds the owner status policy. It does not change any rows.
+- `20261104000000_vg7_availability_search.sql` (VG7). It adds the `booked_property_ids` search function. It does not change any rows.
 
 Start the API on port 3000:
 
@@ -38,11 +39,12 @@ Check the TypeScript build and focused mocked booking tests:
 ```sh
 npm run build
 node dist/test/bookings.test.js
+node dist/test/properties.test.js
 ```
 
 ### Database tests
 
-`supabase/tests/vg2_booking_overlap.test.sql` checks the real overlap constraint in PostgreSQL, including two requests at the same time. `supabase/tests/vg4_booking_status.test.sql` checks owner confirm/reject with RLS as the owner, the guest and another user. Run them only on an **empty local test database**, never on the hosted project; it refuses to run if it finds data. `local_supabase_stub.sql` adds the small part of Supabase (roles, `auth.users`, `auth.uid()`) that a plain PostgreSQL needs. The PostgreSQL `bin` folder must be on `PATH`. Example with a temporary local server on port 54330:
+`supabase/tests/vg2_booking_overlap.test.sql` checks the real overlap constraint in PostgreSQL, including two requests at the same time. `supabase/tests/vg4_booking_status.test.sql` checks owner confirm/reject with RLS as the owner, the guest and another user. `supabase/tests/vg7_availability_search.test.sql` checks availability search as a signed-out visitor and as a user who cannot see the bookings. Run them only on an **empty local test database**, never on the hosted project; it refuses to run if it finds data. `local_supabase_stub.sql` adds the small part of Supabase (roles, `auth.users`, `auth.uid()`) that a plain PostgreSQL needs. The PostgreSQL `bin` folder must be on `PATH`. Example with a temporary local server on port 54330:
 
 ```sh
 initdb -D ../stayfinder-pg-test -U postgres -A trust
@@ -54,12 +56,14 @@ psql -X -h localhost -p 54330 -U postgres -d stayfinder_test -v ON_ERROR_STOP=1 
   -f supabase/migrations/20261031000000_vg_booking_rules.sql \
   -f supabase/migrations/20261103000000_vg2_booking_overlap.sql \
   -f supabase/migrations/20261103120000_vg4_booking_status.sql \
+  -f supabase/migrations/20261104000000_vg7_availability_search.sql \
   -f supabase/tests/vg2_booking_overlap.test.sql \
-  -f supabase/tests/vg4_booking_status.test.sql
+  -f supabase/tests/vg4_booking_status.test.sql \
+  -f supabase/tests/vg7_availability_search.test.sql
 pg_ctl -D ../stayfinder-pg-test stop
 ```
 
-Each check prints `PASS`; each file ends with `VG2 database tests passed.` or `VG4 database tests passed.` and the run stops at the first `FAIL`. Delete the `../stayfinder-pg-test` folder afterwards. It sits outside the repository so it is never committed.
+Each check prints `PASS`; each file ends with `VG2 database tests passed.`, `VG4 database tests passed.` or `VG7 database tests passed.` and the run stops at the first `FAIL`. Delete the `../stayfinder-pg-test` folder afterwards. It sits outside the repository so it is never committed.
 
 ## Main API routes
 
@@ -73,6 +77,7 @@ All routes start at `http://localhost:3000`.
 | `GET /auth/me` | Return the signed-in user | `200`, `401` |
 | `GET /properties/` | Public property list | `200`, `400` invalid filters, `500` server/database error |
 | `GET /properties/?location=Oslo&maxprice=250&maxguests=2&sort=asc` | Filter and sort properties | `200`, `400` invalid filters |
+| `GET /properties/?checkin=2099-01-10&checkout=2099-01-12` | Only properties free for those nights (VG7). Works with the filters above and on `/properties/kind/:kind` | `200`, `400` missing, reversed, past or invalid dates |
 | `GET /properties/:id` | Public property details | `200`, `400` invalid UUID, `404` missing property |
 | `POST /properties/` | Create a property | `201`, `400`, `401` |
 | `PATCH /properties/:id` | Update an owned property | `200`, `400`, `401`, `403`, `404` |
@@ -99,6 +104,12 @@ New bookings are `pending`. The owner of the property can confirm (`pending` →
 
 The database enforces the same rule for direct Supabase requests. An RLS policy lets property owners update bookings on their own properties. The booking trigger then allows that update only when it changes the status, only from `pending`, and only to `confirmed` or `cancelled`. An owner cannot change guest details, dates, price or ownership. All other booking edits still require the booking's guest, and guests still edit and delete their own bookings as before.
 
+## VG7: availability search
+
+`GET /properties/?checkin=YYYY-MM-DD&checkout=YYYY-MM-DD` returns only properties that are free for those nights. It also works on `/properties/kind/:kind` and together with location, price, guests and sorting. Without dates the search works as before. Both dates are required together, check-out must be after check-in, and check-in cannot be in the past; otherwise the API returns `400`.
+
+A property is not free when a `pending` or `confirmed` booking overlaps `[checkin, checkout)`, the same rule as VG2. Cancelled bookings and stays that end on the check-in day do not block it. RLS hides other guests' bookings, so the API cannot decide this from the bookings it can read. Instead it calls the database function `booked_property_ids(check_in, check_out)`. The function runs with its owner's rights, returns only property ids, and never returns guest names, emails or booking details. Anyone may call it, signed in or not.
+
 ## Implemented assignment criteria
 
-Backend work supports G1–G16 and the selected VG1, VG2, VG3, VG4, VG5 and VG6 criteria. VG7 (availability search) is not implemented. All migrations must be present in the target Supabase project for database-level VG enforcement.
+Backend work supports G1–G16 and the selected VG1, VG2, VG3, VG4, VG5, VG6 and VG7 criteria. All migrations must be present in the target Supabase project for database-level VG enforcement.

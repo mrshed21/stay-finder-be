@@ -31,6 +31,8 @@ properties.get("/", propertyListQueryValidator, async (c) => {
       location: filters.location,
       maxGuests: filters.maxguests,
       sort: filters.sort,
+      checkIn: filters.checkin,
+      checkOut: filters.checkout,
     });
     return c.json(properties);
   } catch (e) {
@@ -53,6 +55,8 @@ properties.get("/kind/:kind", propertyParamValidator, propertyListQueryValidator
       location: filters.location,
       maxGuests: filters.maxguests,
       sort: filters.sort,
+      checkIn: filters.checkin,
+      checkOut: filters.checkout,
     });
     return c.json(properties);
   } catch (e) {
