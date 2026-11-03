@@ -62,14 +62,35 @@ export async function updateBooking(
   throw error;
 }
 
+// VG4: changes only the status column.
+export async function updateBookingStatus(
+  sb: BasicSupabaseClient,
+  propertyId: string,
+  bookingId: string,
+  status: "confirmed" | "cancelled",
+): Promise<Booking> {
+  const { error, data }: PostgrestSingleResponse<Booking> = await sb
+    .from(TABLE_NAME)
+    .update({ status })
+    .eq(QUERY_ID, bookingId)
+    .eq(QUERY_PROPERTY_ID, propertyId)
+    .select(SELECT_QUERY)
+    .single();
+
+  if (!error) {
+    return data;
+  }
+  throw error;
+}
+
 export async function getBookingOwner(
   sb: BasicSupabaseClient,
   propertyId: string,
   bookingId: string,
-): Promise<Pick<Booking, "booking_id" | "property_id" | "user_id" | "check_in" | "check_out" | "guests"> | null> {
+): Promise<Pick<Booking, "booking_id" | "property_id" | "user_id" | "check_in" | "check_out" | "guests" | "status"> | null> {
   const { error, data } = await sb
     .from(TABLE_NAME)
-    .select("booking_id, property_id, user_id, check_in, check_out, guests")
+    .select("booking_id, property_id, user_id, check_in, check_out, guests, status")
     .eq(QUERY_ID, bookingId)
     .eq(QUERY_PROPERTY_ID, propertyId)
     .maybeSingle();

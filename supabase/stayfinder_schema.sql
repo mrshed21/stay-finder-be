@@ -93,6 +93,10 @@ to authenticated
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
 
+-- VG4: the "Property owners can update booking status" policy is added by
+-- migration 20261103120000_vg4_booking_status.sql together with the trigger rule
+-- that limits owners to status changes. Do not add the policy without that trigger.
+
 create policy "Guests can delete their own bookings"
 on public.bookings for delete
 to authenticated

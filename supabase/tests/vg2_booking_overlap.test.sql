@@ -20,7 +20,7 @@ $$;
 
 -- Runs one statement and returns 'ok' or the SQLSTATE it failed with.
 -- A failed statement is rolled back on its own; the test keeps going.
-create function pg_temp.try_sql(p_sql text) returns text
+create or replace function pg_temp.try_sql(p_sql text) returns text
 language plpgsql as $$
 begin
   execute p_sql;
@@ -30,7 +30,7 @@ exception when others then
 end;
 $$;
 
-create function pg_temp.try_booking(p_booking uuid, p_property uuid, p_guest uuid, p_in date, p_out date)
+create or replace function pg_temp.try_booking(p_booking uuid, p_property uuid, p_guest uuid, p_in date, p_out date)
 returns text
 language sql as $$
   select pg_temp.try_sql(format(
@@ -40,7 +40,7 @@ language sql as $$
 $$;
 
 -- Runs a query and returns its single value as text.
-create function pg_temp.query_text(p_sql text) returns text
+create or replace function pg_temp.query_text(p_sql text) returns text
 language plpgsql as $$
 declare
   v_result text;
@@ -50,7 +50,7 @@ begin
 end;
 $$;
 
-create procedure pg_temp.expect(p_label text, p_actual text, p_expected text)
+create or replace procedure pg_temp.expect(p_label text, p_actual text, p_expected text)
 language plpgsql as $$
 begin
   if p_actual is distinct from p_expected then

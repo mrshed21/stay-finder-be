@@ -44,6 +44,21 @@ const bookingOptionalSchema = z.object(bookingFields)
     dateOrder,
   );
 
+// VG4: the property owner may only confirm or reject (cancel) a booking.
+const bookingStatusSchema = z.object({
+  status: z.enum(["confirmed", "cancelled"], "Status must be confirmed or cancelled"),
+}).strict();
+
+export const bookingStatusValidator = zValidator(
+  "json",
+  bookingStatusSchema,
+  (result, c) => {
+    if (!result.success) {
+      return c.json(getValidatorError(result.error), 400);
+    }
+  },
+);
+
 export const bookingValidator = zValidator(
   "json",
   bookingSchema,
