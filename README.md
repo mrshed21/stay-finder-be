@@ -20,10 +20,11 @@ FRONTEND_URL=http://localhost:3001
 
 Use the Supabase project URL and its anon/publishable key for `SUPABASE_KEY`. Do not use a service-role key. Keep `.env` local and do not commit it.
 
-For a **new, empty** Supabase project, review and apply `supabase/stayfinder_schema.sql`, then apply the files in `supabase/migrations` in filename order. Do not apply the fresh schema file to a project that already has these tables. The migrations add booking rules; they do not create or reset tables. Auth email confirmation is configured in Supabase Auth.
+For a **new, empty** Supabase project, review and apply `supabase/stayfinder_schema.sql`, then apply the files in `supabase/migrations` in filename order. Do not apply the fresh schema file to a project that already has these tables. The migrations add booking rules and the availability search function; they do not create or reset tables. Auth email confirmation is configured in Supabase Auth.
 
 For an **existing** project, apply only the migrations it does not have yet, in filename order:
 
+- `20261031000000_vg_booking_rules.sql` (booking rules). It adds the booking and property triggers for capacity, past dates and the server-side price. It does not change any rows.
 - `20261103000000_vg2_booking_overlap.sql` (VG2). It stops without changing anything if existing bookings already overlap.
 - `20261103120000_vg4_booking_status.sql` (VG4). It replaces the booking trigger function and adds the owner status policy. It does not change any rows.
 - `20261104000000_vg7_availability_search.sql` (VG7). It adds the `booked_property_ids` search function. It does not change any rows.
@@ -34,7 +35,7 @@ Start the API on port 3000:
 npm run dev
 ```
 
-Check the TypeScript build and focused mocked booking tests:
+Check the TypeScript build and the mocked API tests for bookings and properties:
 
 ```sh
 npm run build
