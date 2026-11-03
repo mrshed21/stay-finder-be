@@ -471,6 +471,40 @@
           ]
         },
         {
+          "name": "Overlapping dates for the same property (VG2)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/bookings/properties/{{propertyId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"guest_name\": \"Test Guest\",\n  \"guest_email\": \"test-guest@example.test\",\n  \"check_in\": \"2099-01-11\",\n  \"check_out\": \"2099-01-13\",\n  \"guests\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 409\", function () { pm.response.to.have.status(409); });",
+                  "pm.test(\"Dates already booked\", function () { pm.expect(pm.response.json().error).to.eql(\"These dates are already booked\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "MANUAL WRITE — Update your disposable booking",
           "request": {
             "method": "PATCH",

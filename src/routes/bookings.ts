@@ -34,12 +34,14 @@ function databaseErrorStatus(error: unknown): number {
 
   if (code === "23503" || code === "PGRST116") return 404;
   if (code === "42501") return 403;
+  // VG2: the bookings_no_overlap exclusion constraint rejected the dates.
+  if (code === "23P01") return 409;
   if (code === "22P02" || code === "23514" || code === "22007") return 400;
   return 500;
 }
 
 function databaseErrorResponse(c: Context, error: unknown) {
-  const status = databaseErrorStatus(error) as 400 | 403 | 404 | 500;
+  const status = databaseErrorStatus(error) as 400 | 403 | 404 | 409 | 500;
   const code = (error as PostgrestError | undefined)?.code;
   const message = (error as PostgrestError | undefined)?.message;
 
@@ -53,10 +55,12 @@ function databaseErrorResponse(c: Context, error: unknown) {
     return c.json({ error: "This booking can no longer be changed or cancelled" }, 400);
   }
 
-  const messages: Record<400 | 403 | 404 | 500, string> = {
+  // Fixed messages only: database error details can contain other guests' booking dates.
+  const messages: Record<400 | 403 | 404 | 409 | 500, string> = {
     400: "Booking data is invalid",
     403: "You are not allowed to change this booking",
     404: "Booking or property not found",
+    409: "These dates are already booked",
     500: "Could not complete the booking request",
   };
 

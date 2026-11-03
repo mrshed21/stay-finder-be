@@ -1,5 +1,9 @@
 -- StayFinder schema reference for a fresh, empty Supabase project.
 -- Review before running. Do not apply it to a project that already has these tables.
+-- Afterwards, apply the files in supabase/migrations in filename order.
+
+-- VG2: lets the bookings overlap constraint compare property_id with =.
+create extension if not exists btree_gist with schema extensions;
 
 create table public.properties (
   property_id uuid primary key default gen_random_uuid(),
@@ -26,7 +30,13 @@ create table public.bookings (
     check (status in ('pending', 'confirmed', 'cancelled')),
   -- VG6: nullable until the API and database calculate and require this value.
   total_price numeric(10, 2) check (total_price >= 0),
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  -- VG2: pending and confirmed stays on the same property may not share a night.
+  -- Dates are half-open [check_in, check_out), so a check-out day can be the next check-in day.
+  constraint bookings_no_overlap exclude using gist (
+    property_id with =,
+    daterange(check_in, check_out, '[)') with &&
+  ) where (status in ('pending', 'confirmed'))
 );
 
 alter table public.properties enable row level security;
