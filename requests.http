@@ -8,6 +8,7 @@
 @password = replace-with-test-password
 @propertyId = replace-with-disposable-property-uuid
 @bookingId = replace-with-disposable-booking-uuid
+@secondBookingId = replace-with-second-disposable-booking-uuid
 
 ### Register test account — expected 201 (if confirmation is required, confirm before login)
 POST {{baseUrl}}/auth/register
@@ -149,7 +150,8 @@ Content-Type: application/json
 }
 
 ### VG2: adjacent dates — expected 201. The check-out day 2099-01-12 can be the next guest's check-in day.
-### MANUAL WRITE: creates a second disposable booking. It is removed when the disposable property is deleted.
+### MANUAL WRITE: creates a second disposable booking; copy its UUID into @secondBookingId.
+### It is removed when the disposable property is deleted.
 POST {{baseUrl}}/bookings/properties/{{propertyId}}
 Content-Type: application/json
 
@@ -189,12 +191,54 @@ Content-Type: application/json
   "check_out": "2099-01-12"
 }
 
-### Attempt to set booking status through API — expected 400 and unchanged booking
+### Attempt to set booking status through the guest edit route — expected 400 and unchanged booking
 PATCH {{baseUrl}}/bookings/properties/{{propertyId}}/{{bookingId}}
 Content-Type: application/json
 
 {
   "status": "confirmed"
+}
+
+### VG4: as the property owner (the account that created the disposable property).
+### Invalid status — expected 400 and unchanged booking
+PATCH {{baseUrl}}/bookings/properties/{{propertyId}}/{{bookingId}}/status
+Content-Type: application/json
+
+{
+  "status": "pending"
+}
+
+### VG4: owner tries to change guest details with the status — expected 400 and unchanged booking
+PATCH {{baseUrl}}/bookings/properties/{{propertyId}}/{{bookingId}}/status
+Content-Type: application/json
+
+{
+  "status": "confirmed",
+  "guest_name": "Changed by owner"
+}
+
+### VG4: confirm the pending disposable booking — expected 200 and "status": "confirmed"
+PATCH {{baseUrl}}/bookings/properties/{{propertyId}}/{{bookingId}}/status
+Content-Type: application/json
+
+{
+  "status": "confirmed"
+}
+
+### VG4: change it again — expected 400 "Only pending bookings can be confirmed or rejected"
+PATCH {{baseUrl}}/bookings/properties/{{propertyId}}/{{bookingId}}/status
+Content-Type: application/json
+
+{
+  "status": "cancelled"
+}
+
+### VG4: reject the second disposable booking — expected 200 and "status": "cancelled"; its dates are free again
+PATCH {{baseUrl}}/bookings/properties/{{propertyId}}/{{secondBookingId}}/status
+Content-Type: application/json
+
+{
+  "status": "cancelled"
 }
 
 ### Non-owner checks: sign in as another test account; PATCH is expected 403 and the booking stays unchanged.
@@ -204,6 +248,14 @@ Content-Type: application/json
 
 {
   "guest_name": "Should not update"
+}
+
+### VG4: the other account cannot change a booking status on someone else's property — expected 403
+PATCH {{baseUrl}}/bookings/properties/{{propertyId}}/{{bookingId}}/status
+Content-Type: application/json
+
+{
+  "status": "cancelled"
 }
 
 DELETE {{baseUrl}}/bookings/properties/{{propertyId}}/{{bookingId}}

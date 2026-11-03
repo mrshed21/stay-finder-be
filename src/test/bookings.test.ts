@@ -118,7 +118,7 @@ class MemoryQuery {
 }
 
 function makeApp(options: {
-  userId?: string;
+  userId?: string | null; // null = signed out
   properties?: Row[];
   bookings?: Row[];
 } = {}) {
@@ -139,7 +139,7 @@ function makeApp(options: {
 
   app.use("*", async (c, next) => {
     c.set("supabase", client as any);
-    c.set("user", { id: options.userId ?? "guest-test" } as any);
+    c.set("user", options.userId === null ? null : { id: options.userId ?? "guest-test" } as any);
     await next();
   });
   app.route("/bookings", bookings);
@@ -476,4 +476,102 @@ test("booking edits return 409 on a conflict but may keep or move their own date
   assert.equal(moved.status, 200);
   assert.equal(tables.bookings[0].check_in, "2099-01-09");
   assert.equal(tables.bookings[0].total_price, 376.5);
+});
+
+// VG4: the property owner confirms or rejects (cancels) a pending booking.
+const statusPath = "/bookings/properties/property-test/booking-test/status";
+
+function guestBooking(overrides: Row = {}) {
+  return storedBooking({
+    booking_id: "booking-test",
+    user_id: "guest-test",
+    guest_name: "Test Guest",
+    guest_email: "guest@example.test",
+    ...overrides,
+  });
+}
+
+test("the property owner can confirm or reject a pending booking", async () => {
+  for (const status of ["confirmed", "cancelled"]) {
+    const { app, tables } = makeApp({ userId: "owner-test", bookings: [guestBooking()] });
+    const before = { ...tables.bookings[0] };
+
+    const response = await requestJson(app, statusPath, "PATCH", { status });
+    const result = await response.json() as Row;
+
+    assert.equal(response.status, 200);
+    assert.equal(result.status, status);
+    assert.deepEqual(tables.bookings[0], { ...before, status });
+  }
+});
+
+test("guests, other users and signed-out requests cannot change a booking status", async () => {
+  for (const userId of ["guest-test", "other-user", null]) {
+    const { app, tables } = makeApp({ userId, bookings: [guestBooking()] });
+    const before = { ...tables.bookings[0] };
+
+    const response = await requestJson(app, statusPath, "PATCH", { status: "confirmed" });
+
+    assert.equal(response.status, userId === null ? 401 : 403);
+    assert.deepEqual(tables.bookings[0], before);
+  }
+});
+
+test("confirmed, cancelled and past bookings cannot be confirmed or rejected again", async () => {
+  const cases = [
+    { booking: guestBooking({ status: "confirmed" }), error: "Only pending bookings can be confirmed or rejected" },
+    { booking: guestBooking({ status: "cancelled" }), error: "Only pending bookings can be confirmed or rejected" },
+    { booking: guestBooking({ check_in: "2000-01-01", check_out: "2000-01-03" }), error: "This booking can no longer be changed or cancelled" },
+  ];
+
+  for (const { booking, error } of cases) {
+    for (const status of ["confirmed", "cancelled"]) {
+      const { app, tables } = makeApp({ userId: "owner-test", bookings: [{ ...booking }] });
+      const before = { ...tables.bookings[0] };
+
+      const response = await requestJson(app, statusPath, "PATCH", { status });
+
+      assert.equal(response.status, 400);
+      assert.deepEqual(await response.json(), { error });
+      assert.deepEqual(tables.bookings[0], before);
+    }
+  }
+});
+
+test("the status endpoint accepts only confirmed or cancelled, and no other booking fields", async () => {
+  const invalid = [
+    { status: "pending" },
+    { status: "approved" },
+    {},
+    { status: "confirmed", guest_name: "Changed by owner" },
+    { status: "confirmed", check_out: "2099-01-20" },
+    { status: "confirmed", total_price: 1 },
+  ];
+
+  for (const body of invalid) {
+    const { app, tables } = makeApp({ userId: "owner-test", bookings: [guestBooking()] });
+    const before = { ...tables.bookings[0] };
+
+    const response = await requestJson(app, statusPath, "PATCH", body);
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(tables.bookings[0], before);
+  }
+});
+
+test("a rejected booking frees its dates, while a confirmed one keeps blocking them (VG2)", async () => {
+  const rejected = makeApp({ userId: "owner-test", bookings: [guestBooking()] });
+  const blocked = await requestJson(rejected.app, "/bookings/properties/property-test", "POST", bookingBody());
+  assert.equal(blocked.status, 409);
+
+  const reject = await requestJson(rejected.app, statusPath, "PATCH", { status: "cancelled" });
+  assert.equal(reject.status, 200);
+  const rebooked = await requestJson(rejected.app, "/bookings/properties/property-test", "POST", bookingBody());
+  assert.equal(rebooked.status, 201);
+
+  const confirmed = makeApp({ userId: "owner-test", bookings: [guestBooking()] });
+  const confirm = await requestJson(confirmed.app, statusPath, "PATCH", { status: "confirmed" });
+  assert.equal(confirm.status, 200);
+  const stillBlocked = await requestJson(confirmed.app, "/bookings/properties/property-test", "POST", bookingBody());
+  assert.equal(stillBlocked.status, 409);
 });

@@ -3,6 +3,7 @@ import type { PostgrestError } from "@supabase/supabase-js";
 
 import {
   bookingOptionalValidator,
+  bookingStatusValidator,
   bookingValidator,
 } from "../validators/bookingValidator.js";
 import {
@@ -11,6 +12,7 @@ import {
   getBookingOwner,
   getBookingsByPropertyId,
   updateBooking,
+  updateBookingStatus,
 } from "../database/bookings.js";
 import { requireAuth } from "../middleware/auth.js";
 import { getPropertyById } from "../database/properties.js";
@@ -53,6 +55,9 @@ function databaseErrorResponse(c: Context, error: unknown) {
   }
   if (code === "23514" && message === "Booking check-in date has passed") {
     return c.json({ error: "This booking can no longer be changed or cancelled" }, 400);
+  }
+  if (code === "23514" && message === "Only pending bookings can be confirmed or cancelled") {
+    return c.json({ error: "Only pending bookings can be confirmed or rejected" }, 400);
   }
 
   // Fixed messages only: database error details can contain other guests' booking dates.
@@ -170,6 +175,47 @@ bookings.patch(
           ? { total_price: calculateTotalPrice(property.price_per_night, checkIn, checkOut) }
           : {}),
       });
+      return c.json(booking);
+    } catch (error) {
+      return databaseErrorResponse(c, error);
+    }
+  },
+);
+
+// VG4: the property owner confirms or rejects (cancels) a pending booking.
+// The database trigger and RLS enforce the same rules for direct Supabase requests.
+bookings.patch(
+  "/properties/:propertyId/:bookingId/status",
+  requireAuth,
+  bookingStatusValidator,
+  async (c) => {
+    const propertyId = c.req.param("propertyId")!;
+    const bookingId = c.req.param("bookingId")!;
+    const { status } = c.req.valid("json");
+    const sb = c.get("supabase");
+    const user = c.get("user");
+
+    try {
+      const property = await getPropertyById(sb, propertyId);
+      if (!property) {
+        return c.json({ error: "Property not found" }, 404);
+      }
+      if (property.user_id !== user!.id) {
+        return c.json({ error: "Only the property owner can confirm or reject bookings" }, 403);
+      }
+
+      const existingBooking = await getBookingOwner(sb, propertyId, bookingId);
+      if (!existingBooking) {
+        return c.json({ error: "Booking not found" }, 404);
+      }
+      if (existingBooking.status !== "pending") {
+        return c.json({ error: "Only pending bookings can be confirmed or rejected" }, 400);
+      }
+      if (existingBooking.check_in < utcToday()) {
+        return c.json({ error: "This booking can no longer be changed or cancelled" }, 400);
+      }
+
+      const booking = await updateBookingStatus(sb, propertyId, bookingId, status);
       return c.json(booking);
     } catch (error) {
       return databaseErrorResponse(c, error);

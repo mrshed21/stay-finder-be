@@ -22,7 +22,10 @@ Use the Supabase project URL and its anon/publishable key for `SUPABASE_KEY`. Do
 
 For a **new, empty** Supabase project, review and apply `supabase/stayfinder_schema.sql`, then apply the files in `supabase/migrations` in filename order. Do not apply the fresh schema file to a project that already has these tables. The migrations add booking rules; they do not create or reset tables. Auth email confirmation is configured in Supabase Auth.
 
-For an **existing** project that already has the first migration, apply only `supabase/migrations/20261103000000_vg2_booking_overlap.sql` (VG2). It stops without changing anything if existing bookings already overlap.
+For an **existing** project, apply only the migrations it does not have yet, in filename order:
+
+- `20261103000000_vg2_booking_overlap.sql` (VG2). It stops without changing anything if existing bookings already overlap.
+- `20261103120000_vg4_booking_status.sql` (VG4). It replaces the booking trigger function and adds the owner status policy. It does not change any rows.
 
 Start the API on port 3000:
 
@@ -39,7 +42,7 @@ node dist/test/bookings.test.js
 
 ### Database tests
 
-`supabase/tests/vg2_booking_overlap.test.sql` checks the real overlap constraint in PostgreSQL, including two requests at the same time. Run it only on an **empty local test database**, never on the hosted project; it refuses to run if it finds data. `local_supabase_stub.sql` adds the small part of Supabase (roles, `auth.users`, `auth.uid()`) that a plain PostgreSQL needs. The PostgreSQL `bin` folder must be on `PATH`. Example with a temporary local server on port 54330:
+`supabase/tests/vg2_booking_overlap.test.sql` checks the real overlap constraint in PostgreSQL, including two requests at the same time. `supabase/tests/vg4_booking_status.test.sql` checks owner confirm/reject with RLS as the owner, the guest and another user. Run them only on an **empty local test database**, never on the hosted project; it refuses to run if it finds data. `local_supabase_stub.sql` adds the small part of Supabase (roles, `auth.users`, `auth.uid()`) that a plain PostgreSQL needs. The PostgreSQL `bin` folder must be on `PATH`. Example with a temporary local server on port 54330:
 
 ```sh
 initdb -D ../stayfinder-pg-test -U postgres -A trust
@@ -50,11 +53,13 @@ psql -X -h localhost -p 54330 -U postgres -d stayfinder_test -v ON_ERROR_STOP=1 
   -f supabase/stayfinder_schema.sql \
   -f supabase/migrations/20261031000000_vg_booking_rules.sql \
   -f supabase/migrations/20261103000000_vg2_booking_overlap.sql \
-  -f supabase/tests/vg2_booking_overlap.test.sql
+  -f supabase/migrations/20261103120000_vg4_booking_status.sql \
+  -f supabase/tests/vg2_booking_overlap.test.sql \
+  -f supabase/tests/vg4_booking_status.test.sql
 pg_ctl -D ../stayfinder-pg-test stop
 ```
 
-Each check prints `PASS`; the script ends with `VG2 database tests passed.` and stops at the first `FAIL`. Delete the `../stayfinder-pg-test` folder afterwards. It sits outside the repository so it is never committed.
+Each check prints `PASS`; each file ends with `VG2 database tests passed.` or `VG4 database tests passed.` and the run stops at the first `FAIL`. Delete the `../stayfinder-pg-test` folder afterwards. It sits outside the repository so it is never committed.
 
 ## Main API routes
 
@@ -76,6 +81,7 @@ All routes start at `http://localhost:3000`.
 | `POST /bookings/properties/:propertyId` | Create a booking | `201`, `400`, `401`, `404`, `409` dates already booked |
 | `PATCH /bookings/properties/:propertyId/:bookingId` | Edit the guest's future booking | `200`, `400`, `401`, `403`, `404`, `409` dates already booked |
 | `DELETE /bookings/properties/:propertyId/:bookingId` | Delete the guest's future booking | `204`, `400`, `401`, `403`, `404` |
+| `PATCH /bookings/properties/:propertyId/:bookingId/status` | Property owner confirms or rejects a pending booking: `{"status": "confirmed"}` or `{"status": "cancelled"}` | `200`, `400` invalid status or not pending, `401`, `403` not the owner, `404` |
 
 Booking requests use the session cookie. Booking ownership and database rules are also enforced by Supabase RLS and the migration triggers. The server calculates `total_price`; do not send it as trusted input.
 
@@ -87,6 +93,12 @@ Two pending or confirmed bookings for the same property may not share a night. A
 
 The rule lives in PostgreSQL as the exclusion constraint `bookings_no_overlap` (`btree_gist` with `daterange`). The database checks every row, including bookings that RLS hides from the current user, and concurrent requests cannot both succeed. When it rejects a write (`23P01`), `POST` and `PATCH` return `409` with `{"error": "These dates are already booked"}`. The API never returns the database error details, because they contain the other booking's dates.
 
+## VG4: owner confirms or rejects bookings
+
+New bookings are `pending`. The owner of the property can confirm (`pending` → `confirmed`) or reject (`pending` → `cancelled`) them with `PATCH /bookings/properties/:propertyId/:bookingId/status`. A rejected booking frees its dates (VG2). Any other status value, or a booking that is no longer pending or has passed its check-in date, returns `400`. Guests and other users get `403`, and signed-out requests get `401`. There is no separate role system: "owner" means the user who owns the property.
+
+The database enforces the same rule for direct Supabase requests. An RLS policy lets property owners update bookings on their own properties. The booking trigger then allows that update only when it changes the status, only from `pending`, and only to `confirmed` or `cancelled`. An owner cannot change guest details, dates, price or ownership. All other booking edits still require the booking's guest, and guests still edit and delete their own bookings as before.
+
 ## Implemented assignment criteria
 
-Backend work supports G1–G16 and the selected VG1, VG2, VG3, VG5 and VG6 criteria. VG4 (role-based status transitions) and VG7 (availability search) are not implemented. Both migrations must be present in the target Supabase project for database-level VG enforcement.
+Backend work supports G1–G16 and the selected VG1, VG2, VG3, VG4, VG5 and VG6 criteria. VG7 (availability search) is not implemented. All migrations must be present in the target Supabase project for database-level VG enforcement.
