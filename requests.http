@@ -52,6 +52,16 @@ GET {{baseUrl}}/properties/?location=Oslo&maxprice=250&maxguests=2&sort=asc
 ### Descending price sort — expected 200
 GET {{baseUrl}}/properties/?sort=desc
 
+### VG7: properties free on these nights (works signed out) — expected 200
+### A stay with a pending or confirmed booking that overlaps 2099-01-10 to 2099-01-12 is not listed.
+GET {{baseUrl}}/properties/?checkin=2099-01-10&checkout=2099-01-12
+
+### VG7: dates together with the other filters and a kind — expected 200
+GET {{baseUrl}}/properties/kind/apartment?location=Oslo&maxguests=2&sort=asc&checkin=2099-01-10&checkout=2099-01-12
+
+### VG7: only one date, or check-out before check-in — expected 400
+GET {{baseUrl}}/properties/?checkin=2099-01-12&checkout=2099-01-10
+
 ### Missing property — expected 404
 GET {{baseUrl}}/properties/00000000-0000-0000-0000-000000000000
 

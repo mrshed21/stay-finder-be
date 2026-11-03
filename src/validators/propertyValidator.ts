@@ -1,6 +1,7 @@
 import * as z from "zod";
 import { zValidator } from "@hono/zod-validator";
 import { getValidatorError } from "../utils/validation.js";
+import { isValidDate } from "./bookingValidator.js";
 import type { PropertyKind } from "../types/property.js";
 
 const propertySchema = z.object({
@@ -27,12 +28,31 @@ const propertyIdParamSchema = z.object({
   id: z.uuid("Property ID must be a UUID"),
 });
 
+// VG7: optional stay dates, YYYY-MM-DD.
+const searchDate = z.string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Dates must use YYYY-MM-DD")
+  .refine(isValidDate, "Dates must be valid calendar dates");
+
 const propertyListQuerySchema = z.object({
   location: z.string().trim().min(1).max(100).optional(),
   maxprice: z.coerce.number().finite().nonnegative().optional(),
   maxguests: z.coerce.number().int().min(1).optional(),
   sort: z.enum(["asc", "desc"]).optional(),
-});
+  checkin: searchDate.optional(),
+  checkout: searchDate.optional(),
+})
+  .refine((query) => !query.checkin === !query.checkout, {
+    message: "Give both checkin and checkout",
+    path: ["checkout"],
+  })
+  .refine((query) => !query.checkin || !query.checkout || query.checkin < query.checkout, {
+    message: "Check out must be after check in",
+    path: ["checkout"],
+  })
+  .refine((query) => !query.checkin || query.checkin >= new Date().toISOString().slice(0, 10), {
+    message: "Check in cannot be in the past",
+    path: ["checkin"],
+  });
 
 const propertyParamSchema = z.object({
   kind: z.enum<PropertyKind[]>(

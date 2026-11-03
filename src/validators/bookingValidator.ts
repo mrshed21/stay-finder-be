@@ -2,7 +2,7 @@ import * as z from "zod";
 import { zValidator } from "@hono/zod-validator";
 import { getValidatorError } from "../utils/validation.js";
 
-function isValidDate(value: string): boolean {
+export function isValidDate(value: string): boolean {
   const [year, month, day] = value.split("-").map(Number);
   const date = new Date(Date.UTC(year, month - 1, day));
 
