@@ -135,6 +135,40 @@ Content-Type: application/json
   "guests": 1
 }
 
+### VG2: overlapping dates — expected 409 {"error": "These dates are already booked"} and no booking created.
+### Overlaps the disposable booking above (2099-01-10 to 2099-01-12). Any signed-in account gets the same result.
+POST {{baseUrl}}/bookings/properties/{{propertyId}}
+Content-Type: application/json
+
+{
+  "guest_name": "Test Guest",
+  "guest_email": "test-guest@example.test",
+  "check_in": "2099-01-11",
+  "check_out": "2099-01-13",
+  "guests": 1
+}
+
+### VG2: adjacent dates — expected 201. The check-out day 2099-01-12 can be the next guest's check-in day.
+### MANUAL WRITE: creates a second disposable booking. It is removed when the disposable property is deleted.
+POST {{baseUrl}}/bookings/properties/{{propertyId}}
+Content-Type: application/json
+
+{
+  "guest_name": "Test Guest",
+  "guest_email": "test-guest@example.test",
+  "check_in": "2099-01-12",
+  "check_out": "2099-01-14",
+  "guests": 1
+}
+
+### VG2: move the first booking onto the second one — expected 409 and unchanged booking
+PATCH {{baseUrl}}/bookings/properties/{{propertyId}}/{{bookingId}}
+Content-Type: application/json
+
+{
+  "check_out": "2099-01-13"
+}
+
 ### Visible bookings — expected 200 for the guest or property owner, 401 signed out
 GET {{baseUrl}}/bookings/properties/{{propertyId}}
 

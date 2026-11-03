@@ -7,6 +7,26 @@ import bookings from "../routes/bookings.js";
 type Row = Record<string, any>;
 type MemoryTables = { properties: Row[]; bookings: Row[] };
 
+const ACTIVE_STATUSES = ["pending", "confirmed"];
+
+// Same rule as the bookings_no_overlap constraint: active stays on one property
+// may not share a night. Dates are half-open [check_in, check_out).
+// The real check runs in PostgreSQL; supabase/tests covers it there.
+function overlapsActiveBooking(rows: Row[], candidate: Row, ignore?: Row) {
+  return ACTIVE_STATUSES.includes(candidate.status) && rows.some((row) =>
+    row !== ignore
+    && row.property_id === candidate.property_id
+    && ACTIVE_STATUSES.includes(row.status)
+    && candidate.check_in < row.check_out
+    && row.check_in < candidate.check_out,
+  );
+}
+
+const overlapError = {
+  data: null,
+  error: { code: "23P01", message: 'conflicting key value violates exclusion constraint "bookings_no_overlap"' },
+};
+
 class MemoryQuery {
   private action: "select" | "insert" | "update" | "delete" = "select";
   private values: Row = {};
@@ -66,9 +86,14 @@ class MemoryQuery {
 
     if (this.action === "insert") {
       const inserted = { ...this.values, booking_id: "booking-test", created_at: "2099-01-01T00:00:00Z" };
+      if (this.table === "bookings" && overlapsActiveBooking(rows, inserted)) return overlapError;
       rows.push(inserted);
       matching = [inserted];
     } else if (this.action === "update") {
+      if (this.table === "bookings"
+        && matching.some((row) => overlapsActiveBooking(rows, { ...row, ...this.values }, row))) {
+        return overlapError;
+      }
       matching.forEach((row) => Object.assign(row, this.values));
     } else if (this.action === "delete") {
       matching.forEach((row) => rows.splice(rows.indexOf(row), 1));
@@ -354,4 +379,101 @@ test("a property price change does not alter an existing booking total", async (
 
   assert.equal(response.status, 200);
   assert.equal(tables.bookings[0].total_price, 251);
+});
+
+// VG2: overlapping bookings. The database constraint returns 23P01; the API answers 409.
+function storedBooking(overrides: Row = {}) {
+  return {
+    booking_id: "booking-other",
+    property_id: "property-test",
+    user_id: "other-guest",
+    guest_name: "Other Guest",
+    guest_email: "other@example.test",
+    check_in: "2099-01-10",
+    check_out: "2099-01-12",
+    guests: 1,
+    total_price: 251,
+    status: "pending",
+    ...overrides,
+  };
+}
+
+test("overlapping dates return 409 and do not create a booking", async () => {
+  const overlapping = [
+    { check_in: "2099-01-10", check_out: "2099-01-12" }, // exact duplicate
+    { check_in: "2099-01-11", check_out: "2099-01-13" }, // partial overlap
+    { check_in: "2099-01-09", check_out: "2099-01-13" }, // covers the whole stay
+  ];
+
+  for (const dates of overlapping) {
+    for (const status of ["pending", "confirmed"]) {
+      const { app, tables } = makeApp({ bookings: [storedBooking({ status })] });
+      const response = await requestJson(
+        app,
+        "/bookings/properties/property-test",
+        "POST",
+        bookingBody(dates),
+      );
+
+      assert.equal(response.status, 409);
+      assert.deepEqual(await response.json(), { error: "These dates are already booked" });
+      assert.equal(tables.bookings.length, 1);
+    }
+  }
+});
+
+test("adjacent dates, other properties and cancelled bookings do not block a booking", async () => {
+  const cases = [
+    { existing: storedBooking(), path: "property-test", dates: { check_in: "2099-01-12", check_out: "2099-01-14" } },
+    { existing: storedBooking(), path: "property-test", dates: { check_in: "2099-01-08", check_out: "2099-01-10" } },
+    { existing: storedBooking(), path: "property-other", dates: { check_in: "2099-01-10", check_out: "2099-01-12" } },
+    { existing: storedBooking({ status: "cancelled" }), path: "property-test", dates: { check_in: "2099-01-10", check_out: "2099-01-12" } },
+  ];
+
+  for (const { existing, path, dates } of cases) {
+    const { app, tables } = makeApp({
+      properties: [
+        { property_id: "property-test", user_id: "owner-test", max_guests: 2, price_per_night: 125.5 },
+        { property_id: "property-other", user_id: "owner-test", max_guests: 2, price_per_night: 125.5 },
+      ],
+      bookings: [existing],
+    });
+    const response = await requestJson(app, `/bookings/properties/${path}`, "POST", bookingBody(dates));
+
+    assert.equal(response.status, 201);
+    assert.equal(tables.bookings.length, 2);
+  }
+});
+
+test("booking edits return 409 on a conflict but may keep or move their own dates", async () => {
+  const mine = storedBooking({
+    booking_id: "booking-test",
+    user_id: "guest-test",
+    guest_name: "Test Guest",
+    guest_email: "guest@example.test",
+  });
+  const next = storedBooking({ check_in: "2099-01-12", check_out: "2099-01-14" });
+  const { app, tables } = makeApp({ bookings: [{ ...mine }, { ...next }] });
+  const path = "/bookings/properties/property-test/booking-test";
+  const before = { ...tables.bookings[0] };
+
+  const conflict = await requestJson(app, path, "PATCH", { check_out: "2099-01-13" });
+  assert.equal(conflict.status, 409);
+  assert.deepEqual(await conflict.json(), { error: "These dates are already booked" });
+  assert.deepEqual(tables.bookings[0], before);
+
+  // The frontend sends the unchanged dates with every edit. They must not clash with the booking itself.
+  const sameDates = await requestJson(app, path, "PATCH", {
+    guest_name: "Renamed Guest",
+    check_in: "2099-01-10",
+    check_out: "2099-01-12",
+  });
+  assert.equal(sameDates.status, 200);
+  assert.equal(tables.bookings[0].guest_name, "Renamed Guest");
+  assert.equal(tables.bookings[0].total_price, 251);
+
+  const moved = await requestJson(app, path, "PATCH", { check_in: "2099-01-09" });
+  assert.equal(moved.status, 200);
+  assert.equal(tables.bookings[0].check_in, "2099-01-09");
+  assert.equal(tables.bookings[0].total_price, 376.5);
 });
